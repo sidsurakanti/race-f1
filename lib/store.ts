@@ -18,17 +18,23 @@ export const useCarStore = create<CarState>()((set) => ({
     y: 0,
     z: 0,
   },
-  setVelocity: (n) => set({ velocity: n }),
-  setDirection: (n) => set({ direction: n }),
+  setVelocity: (n) =>
+    set((state) => ({
+      velocity: n > 0 ? Math.tanh((state.velocity + n) * 0.1) * 10 : 0,
+    })),
+  setDirection: (n) =>
+    set((state) => ({
+      direction: state.direction + n,
+    })),
   setPosition: ({ x, y, z }) => set({ position: { x: x, y: y, z: z } }),
   update: (delta) =>
     set((state) => ({
       position: {
         x:
-          state.position.x + Math.sin(state.direction) * delta * state.velocity,
+          state.position.x - Math.sin(state.direction) * delta * state.velocity,
         y: state.position.y,
         z:
-          state.position.z + Math.cos(state.direction) * delta * state.velocity,
+          state.position.z - Math.cos(state.direction) * delta * state.velocity,
       },
     })),
 }));
