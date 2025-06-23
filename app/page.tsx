@@ -1,6 +1,7 @@
 "use client";
 import * as THREE from "three";
-import { RefObject, useRef } from "react";
+import { useRef } from "react";
+import { useCarStore, type CarState } from "@/lib/store";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Environment,
@@ -19,14 +20,14 @@ export default function Home() {
           <Environment preset="sunset" />
           <ambientLight intensity={3.5} />
           <gridHelper args={[500, 30, 30]} />
-          <axesHelper args={[5]} />
+          <axesHelper args={[50]} />
           <mesh
-            rotation={[Math.PI / 2, 0, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
             position={[0, -1, 0]}
-            receiveShadow
+            // receiveShadow
           >
             <planeGeometry args={[500, 500]} />
-            <meshStandardMaterial color={"gray"} side={THREE.DoubleSide} />
+            <meshStandardMaterial color={"gray"} />
           </mesh>
           <Light position={[0, 5, 0]} intensity={0.5} />
           <Car position={[0, 0, 0]} />
@@ -40,18 +41,22 @@ export default function Home() {
 }
 function Light(props: React.JSX.IntrinsicElements["directionalLight"]) {
   const lightRef = useRef<THREE.DirectionalLight | null>(null);
-  useHelper(
-    lightRef as RefObject<THREE.DirectionalLight>,
-    THREE.DirectionalLightHelper,
-    1,
-  );
+  // useHelper(
+  //   lightRef as RefObject<THREE.DirectionalLight>,
+  //   THREE.DirectionalLightHelper,
+  //   1,
+  // );
+
   return <directionalLight ref={lightRef} {...props} />;
 }
 
 function Cube() {
   const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame((_, delta) => {
+  const { position } = useCarStore((state) => state);
+  useFrame((state, delta) => {
+    const { x, y, z } = position;
+    const { camera } = state;
+    camera.lookAt(x, y, z);
     if (meshRef.current) meshRef.current.rotation.y += delta;
   });
 
@@ -72,8 +77,8 @@ function Track(
     <primitive
       {...props}
       object={scene}
-      scale={0.002}
-      position={[12, 0.01, 0]}
+      scale={0.0045}
+      position={[50, 0.1, 0]}
     />
   );
 }
@@ -81,12 +86,20 @@ function Track(
 function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
   const { scene } = useGLTF("/models/car.glb");
 
-  const carRef = useRef<THREE.Mesh>(null);
+  const carRef = useRef<THREE.Mesh | null>(null);
+  const { position, direction, velocity, setPosition } = useCarStore(
+    (state) => state,
+  );
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     if (carRef.current) {
-      carRef.current.position.x -= 2 * delta;
-      carRef.current.position.z += 1 * delta;
+      const carPos = carRef.current.position;
+      setPosition(carPos);
+      // console.log(carRef.current.position);
+      // console.log(camera.position);
+      camera.position.set(carPos.x + 5, 2, carPos.z);
+      carPos.x -= 2 * delta;
+      carPos.z += 1 * delta;
     }
   });
 
