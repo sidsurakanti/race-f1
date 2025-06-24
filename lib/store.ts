@@ -19,6 +19,6 @@ export const useCarStore = create<CarState>()((set) => ({
     })),
   setDirection: (n) =>
     set((state) => ({
-      direction: state.direction + n,
+      direction: state.direction + n * 0.5,
     })),
 }));

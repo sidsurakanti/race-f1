@@ -19,7 +19,7 @@ export default function RootLayout({
         className={cn(
           sans.className,
           mono.className,
-          "w-full h-screen antialiased subpixel-antialiased",
+          "relative w-full h-screen antialiased subpixel-antialiased",
         )}
       >
         {children}
