@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { Suspense, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { useCarStore } from "@/lib/store";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
@@ -9,7 +10,6 @@ import {
   OrbitControls,
   useGLTF,
   useHelper,
-  Sky,
 } from "@react-three/drei";
 import {
   Physics,
@@ -49,11 +49,19 @@ export default function Home() {
           </span>
           <span className="flex items-center gap-1.5">
             <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
+              ⎵
+            </kbd>{" "}
+            DRS
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
               r
             </kbd>{" "}
             reset
           </span>
         </section>
+        <Hud />
+
         <Canvas
           camera={{ fov: 80, near: 0.1, far: 1000, position: [0, 20, 15] }}
         >
@@ -63,17 +71,7 @@ export default function Home() {
           {/* <gridHelper args={[500, 30, 30]} /> */}
           {/* <axesHelper args={[50]} /> */}
           <Suspense fallback={<></>}>
-            <Physics debug>
-              <RigidBody type="fixed" colliders="cuboid">
-                <mesh
-                  visible={false}
-                  rotation={[-Math.PI / 2, 0, 0]}
-                  position={[0, -1, 0]}
-                >
-                  <planeGeometry args={[100, 100]} />
-                  <meshStandardMaterial color={"white"} />
-                </mesh>
-              </RigidBody>
+            <Physics>
               <Car />
               <Track />
             </Physics>
@@ -89,10 +87,10 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
   const { scene } = useGLTF("/models/car.glb");
   const bodyRef = useRef<RapierRigidBody>(null);
   const isMoving = useRef<boolean>(false);
+  const isBoosting = useRef<number>(1);
   const turnStep = Math.PI / 18;
-  const { direction, velocity, setVelocity, setDirection } = useCarStore(
-    (state) => state,
-  );
+  const { direction, velocity, resetVelocity, setVelocity, setDirection } =
+    useCarStore((state) => state);
 
   useEffect(() => {
     window.onkeydown = (e: KeyboardEvent) => {
@@ -114,12 +112,18 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
           if (!bodyRef.current) break;
           bodyRef.current.setTranslation({ x: 5, y: 0, z: 0 }, true);
           bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          resetVelocity();
+          break;
+        case " ":
+          isBoosting.current = 1.75;
           break;
       }
     };
 
     window.onkeyup = (e: KeyboardEvent) => {
       if (e.key === "w") isMoving.current = false;
+      if (e.key === " ") isBoosting.current = 1;
     };
   }, []);
 
@@ -132,7 +136,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     body.setRotation(quat, true);
 
     // const curvedVelocity = Math.tanh(velocity * 2.5) * 10;
-    const curvedVelocity = Math.pow(velocity, 2.5) * 12.5;
+    const curvedVelocity = Math.pow(velocity, 2.5) * 12.5 * isBoosting.current;
     body.setLinvel(
       new THREE.Vector3(
         -Math.sin(direction) * curvedVelocity,
@@ -177,6 +181,28 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       <primitive {...props} object={scene} scale={1} />
       <CuboidCollider args={[1.0, 0.5, 1.5]} position={[0, 0.5, 0]} />
     </RigidBody>
+  );
+}
+
+function Hud() {
+  const { velocity } = useCarStore((state) => state);
+  const bars = 10;
+  const active = Math.round(velocity * bars);
+  return (
+    <div className="absolute top-0 w-full flex justify-center auto z-1">
+      <span className="gap-1 p-2 m-2 flex bg-black/20 text-white text-2xl ">
+        {Array.from({ length: bars }).map((_, i) => (
+          <div
+            key={i}
+            className={cn("w-6 h-6 shadow-sm", i < active ? "" : "bg-black/60")}
+            style={{
+              backgroundColor:
+                i < active ? `hsl(${i * 12}, 100%, 50%)` : undefined,
+            }}
+          />
+        ))}
+      </span>
+    </div>
   );
 }
 
