@@ -1,6 +1,7 @@
 "use client";
 
 import * as THREE from "three";
+import { MathUtils } from "three";
 import { Suspense, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useCarStore } from "@/lib/store";
@@ -71,7 +72,7 @@ export default function Home() {
           {/* <gridHelper args={[500, 30, 30]} /> */}
           {/* <axesHelper args={[50]} /> */}
           <Suspense fallback={<></>}>
-            <Physics>
+            <Physics gravity={[0, -30, 0]}>
               <Car />
               <Track />
             </Physics>
@@ -84,23 +85,40 @@ export default function Home() {
 }
 
 function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
-  const { scene } = useGLTF("/models/car.glb");
+  const { scene } = useGLTF("/models/f1.glb");
   const bodyRef = useRef<RapierRigidBody>(null);
   const isMoving = useRef<boolean>(false);
-  const isBoosting = useRef<number>(1);
+  const isBoosting = useRef<number>(0);
   const turnStep = Math.PI / 18;
-  const { direction, velocity, resetVelocity, setVelocity, setDirection } =
-    useCarStore((state) => state);
+  const lookTarget = useRef(new THREE.Vector3());
+  const {
+    direction,
+    velocity,
+    resetDirection,
+    resetVelocity,
+    setVelocity,
+    setDirection,
+  } = useCarStore((state) => state);
+  const INITIAL_DIRECTION = -6 * turnStep;
+  const INITIAL_POSITION: [x: number, y: number, z: number] = [15, 0, 0];
+  const initialLoad = useRef<boolean>(false);
 
   useEffect(() => {
-    window.onkeydown = (e: KeyboardEvent) => {
+    if (bodyRef.current && !initialLoad.current) {
+      const quat = new THREE.Quaternion();
+      setDirection(INITIAL_DIRECTION);
+      quat.setFromEuler(new THREE.Euler(0, direction, 0));
+      bodyRef.current.setRotation(quat, true);
+      initialLoad.current = true;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case "w":
-          setVelocity(0.075);
+          setVelocity(0.1);
           isMoving.current = true;
           break;
         case "s":
-          setVelocity(-0.075);
+          setVelocity(-0.1);
           break;
         case "d":
           setDirection(-turnStep);
@@ -110,20 +128,42 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
           break;
         case "r":
           if (!bodyRef.current) break;
-          bodyRef.current.setTranslation({ x: 5, y: 0, z: 0 }, true);
-          bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          const body = bodyRef.current;
+          body.setTranslation(
+            {
+              x: INITIAL_POSITION[0],
+              y: INITIAL_POSITION[1],
+              z: INITIAL_POSITION[2],
+            },
+            true,
+          );
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          body.setAngvel({ x: 0, y: 0, z: 0 }, true);
           resetVelocity();
+
+          resetDirection();
+          setDirection(INITIAL_DIRECTION);
+          const quat = new THREE.Quaternion();
+          quat.setFromEuler(new THREE.Euler(0, direction, 0));
+          body.setRotation(quat, true);
+
           break;
         case " ":
-          isBoosting.current = 1.75;
+          isBoosting.current = 20;
           break;
       }
     };
 
-    window.onkeyup = (e: KeyboardEvent) => {
+    const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === "w") isMoving.current = false;
-      if (e.key === " ") isBoosting.current = 1;
+      if (e.key === " ") isBoosting.current = 0;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -135,8 +175,9 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     quat.setFromEuler(new THREE.Euler(0, direction, 0));
     body.setRotation(quat, true);
 
-    // const curvedVelocity = Math.tanh(velocity * 2.5) * 10;
-    const curvedVelocity = Math.pow(velocity, 2.5) * 12.5 * isBoosting.current;
+    // const curvedVelocity =
+    //   Math.tanh(velocity * 2.5) * 16.5 + isBoosting.current;
+    const curvedVelocity = Math.pow(velocity, 3) * 50 + isBoosting.current;
     body.setLinvel(
       new THREE.Vector3(
         -Math.sin(direction) * curvedVelocity,
@@ -145,41 +186,50 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       ),
       true,
     );
-    // if (isMoving.current) setVelocity(-0.001);
+    // if (isMoving.current) setVelocity(-0.1);
 
-    const camOffset = new THREE.Vector3(0, 2.5, 6);
+    // add downforce lmfao
+    const downforce = -Math.pow(curvedVelocity, 1.2) * 0.5;
+    body.applyImpulse({ x: 0, y: downforce, z: 0 }, true);
+
+    const camOffset = new THREE.Vector3(0, 10, 20);
     camOffset.applyQuaternion(quat);
 
     const pos = body.translation();
-    camera.lookAt(pos.x, pos.y, pos.z);
     const targetPos = new THREE.Vector3(
       pos.x + camOffset.x,
       pos.y + camOffset.y,
       pos.z + camOffset.z,
     );
-    camera.position.lerp(targetPos, 0.08);
+    camera.position.lerp(targetPos, 0.05);
 
-    // add downforce lmfao
-    const vel = bodyRef.current.linvel();
-    const speed = Math.sqrt(vel.x ** 2 + vel.z ** 2);
-    body.applyImpulse({ x: 0, y: -speed * 0.2, z: 0 }, true);
+    const target = lookTarget.current;
+    target.x = MathUtils.lerp(target.x, pos.x, 0.05);
+    target.y = MathUtils.lerp(target.y, pos.y, 0.05);
+    target.z = MathUtils.lerp(target.z, pos.z, 0.05);
+    camera.lookAt(target.x, target.y, target.z);
   });
 
   return (
     <RigidBody
       ccd={true}
-      position={[5, 0, 0]}
+      position={INITIAL_POSITION}
       restitution={0}
-      linearDamping={0.4}
-      angularDamping={0.25}
+      linearDamping={0.9}
+      angularDamping={0.5}
       friction={0}
       type="dynamic"
       colliders={false}
       enabledRotations={[false, true, false]}
       ref={bodyRef}
     >
-      <primitive {...props} object={scene} scale={1} />
-      <CuboidCollider args={[1.0, 0.5, 1.5]} position={[0, 0.5, 0]} />
+      <primitive
+        {...props}
+        object={scene}
+        scale={2.25}
+        rotation={[0, 5 * Math.PI, 0]}
+      />
+      <CuboidCollider args={[1.5, 0.2, 5]} position={[0, 0.5, 0]} />
     </RigidBody>
   );
 }
@@ -210,14 +260,18 @@ function Track(
   props: Omit<React.JSX.IntrinsicElements["primitive"], "object">,
 ) {
   const { scene } = useGLTF("/models/monaco.glb");
+  // scale={6}
+  // position={[-360, -10, 0]}
+  // rotation={[Math.PI, Math.PI, 0]}
+  // const { scene } = useGLTF("/models/track2.glb");
 
   return (
     <RigidBody friction={0} restitution={0} type="fixed" colliders="trimesh">
       <primitive
         {...props}
         object={scene}
-        scale={0.0085}
-        position={[85, 0.1, 0]}
+        scale={0.025}
+        position={[250, 0.1, 0]}
       />
     </RigidBody>
   );

@@ -1,10 +1,10 @@
-import { velocity } from "three/tsl";
 import { create } from "zustand";
 
 export type CarState = {
   velocity: number;
   direction: number;
   resetVelocity: () => void;
+  resetDirection: () => void;
   setVelocity: (n: number) => void;
   setDirection: (n: number) => void;
 };
@@ -13,6 +13,7 @@ export const useCarStore = create<CarState>()((set) => ({
   velocity: 0,
   direction: 0,
   resetVelocity: () => set({ velocity: 0 }),
+  resetDirection: () => set({ direction: 0 }),
   setVelocity: (n) =>
     set((state) => ({
       velocity:
