@@ -59,14 +59,15 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     incrementTime,
     setDirection,
   } = useCarStore((state) => state);
+  const keysPressed = useRef<Set<string>>(new Set());
 
   const bodyRef = useRef<RapierRigidBody>(null);
   const isMoving = useRef<boolean>(false);
   const initialLoad = useRef<boolean>(false);
   const lookTarget = useRef(new THREE.Vector3());
 
-  const TURN_STEP = Math.PI / 16;
-  const INITIAL_DIRECTION = -16 * TURN_STEP;
+  const TURN_STEP = Math.PI * (5 / 6);
+  const INITIAL_DIRECTION = -Math.PI;
   const INITIAL_POSITION: [x: number, y: number, z: number] = [-165, 0, 3];
 
   useEffect(() => {
@@ -79,76 +80,69 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       bodyRef.current.setRotation(quat, true);
     }
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      switch (e.key.toLowerCase()) {
-        case "w":
-          isMoving.current = true;
-          incrementTime(0.1);
-          break;
-        case " ":
-          setIsBreaking(true);
-          incrementTime(-0.1);
-          break;
-        case "d":
-          setDirection(-TURN_STEP);
-          break;
-        case "a":
-          setDirection(+TURN_STEP);
-          break;
-        case "r":
-          if (!bodyRef.current) break;
-          const body = bodyRef.current;
-          body.setTranslation(
-            {
-              x: INITIAL_POSITION[0],
-              y: INITIAL_POSITION[1],
-              z: INITIAL_POSITION[2],
-            },
-            true,
-          );
-          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-          body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-          resetTime();
-          resetVelocity();
-          resetDirection();
-          setDirection(INITIAL_DIRECTION);
-
-          const quat = new THREE.Quaternion();
-          quat.setFromEuler(new THREE.Euler(0, direction, 0));
-          body.setRotation(quat, true);
-
-          break;
-        case "shift":
-          if (isMoving.current) incrementTime(0.1);
-          setBoost(true);
-          break;
-        default:
-          console.log(e.key);
-      }
+    const handleKeyDown = ({ key }: KeyboardEvent) => {
+      keysPressed.current.add(key.toLowerCase());
     };
 
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === "w") {
-        resetTime();
-        isMoving.current = false;
-      }
-      if (e.key === " ") {
-        setIsBreaking(false);
-      }
-      if (e.key.toLowerCase() === "shift") setBoost(false);
+    const handleKeyUp = ({ key }: KeyboardEvent) => {
+      keysPressed.current.delete(key.toLowerCase());
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
   }, []);
 
   useFrame(({ camera }, delta) => {
     if (!bodyRef.current) return;
     const body = bodyRef.current;
+    const keys = keysPressed.current;
+
+    if (keys.has("r")) {
+      keys.delete("r");
+
+      if (bodyRef.current) {
+        const body = bodyRef.current;
+        body.setTranslation(
+          {
+            x: INITIAL_POSITION[0],
+            y: INITIAL_POSITION[1],
+            z: INITIAL_POSITION[2],
+          },
+          true,
+        );
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        resetTime();
+        resetVelocity();
+        resetDirection();
+        setDirection(INITIAL_DIRECTION);
+
+        const quat = new THREE.Quaternion();
+        quat.setFromEuler(new THREE.Euler(0, direction, 0));
+        body.setRotation(quat, true);
+      }
+    }
+    const forward = keys.has("w");
+    const brake = keys.has(" ");
+    const left = keys.has("a");
+    const right = keys.has("d");
+    const drs = keys.has("shift");
+
+    if (forward) {
+      incrementTime(delta);
+      isMoving.current = true;
+    } else {
+      isMoving.current = false;
+    }
+
+    setIsBreaking(brake);
+    setBoost(drs);
+    if (left) setDirection(+TURN_STEP * delta);
+    if (right) setDirection(-TURN_STEP * delta);
 
     const currRot = body.rotation(); // returns {x, y, z, w}
     const currQuat = new THREE.Quaternion(
@@ -183,10 +177,9 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     const TOP_SPEED = 80;
 
     if (!isBreaking && isMoving.current) setVelocity(accelZone(time) * delta);
-    else if (isBreaking) setVelocity(-(velocity * (1 - 0.9965)));
-    else setVelocity(-velocity * (1 - 0.9998));
-
-    const speed = Math.min(TOP_SPEED, isBreaking ? velocity : velocity + boost);
+    else if (isBreaking) setVelocity(-velocity * (1 - 0.9965));
+    else setVelocity(-velocity * (1 - 0.99965));
+    const speed = Math.min(TOP_SPEED, velocity + boost);
 
     // console.log(time, isBreaking, speed);
     body.setLinvel(
