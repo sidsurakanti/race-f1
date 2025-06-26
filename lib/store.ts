@@ -1,6 +1,15 @@
 import { velocity } from "three/tsl";
 import { create } from "zustand";
 
+type GameState = {
+  camMode: 0 | 1;
+  setCamMode: (mode: 0 | 1) => void;
+};
+export const useGameState = create<GameState>()((set) => ({
+  camMode: 0,
+  setCamMode: (mode) => set({ camMode: mode }),
+}));
+
 export type CarState = {
   time: number;
   velocity: number;
@@ -18,7 +27,7 @@ export type CarState = {
   setDirection: (n: number) => void;
 };
 
-export const useCarStore = create<CarState>()((set) => ({
+export const useCarState = create<CarState>()((set) => ({
   time: 0,
   direction: 0,
   boost: 0,
@@ -26,7 +35,7 @@ export const useCarStore = create<CarState>()((set) => ({
   velocity: 0,
   setVelocity: (n) =>
     set((state) => ({
-      velocity: Math.min(80, Math.max(0, state.velocity + n)),
+      velocity: Math.min(85, Math.max(0, state.velocity + n)),
     })),
   setIsBreaking: (tf) => set({ isBreaking: tf }),
   setBoost: (tf) => set({ boost: tf ? 20 : 0 }),

@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { MathUtils } from "three";
 import { Suspense, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { useCarStore } from "@/lib/store";
+import { useGameState, useCarState } from "@/lib/store";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, OrbitControls, useGLTF } from "@react-three/drei";
 import {
@@ -22,7 +22,7 @@ export default function Home() {
         <Help />
 
         <Canvas
-          camera={{ fov: 85, near: 0.1, far: 800, position: [10, 20, 15] }}
+          camera={{ fov: 85, near: 0.1, far: 800, position: [10, 40, 15] }}
         >
           <fog attach="fog" args={[0xfad5a5, 70, 400]} />
           <Environment preset="sunset" />
@@ -58,7 +58,8 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     resetTime,
     incrementTime,
     setDirection,
-  } = useCarStore((state) => state);
+  } = useCarState((state) => state);
+  const { camMode, setCamMode } = useGameState((state) => state);
   const keysPressed = useRef<Set<string>>(new Set());
 
   const bodyRef = useRef<RapierRigidBody>(null);
@@ -116,11 +117,12 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
         );
         body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
         resetTime();
         resetVelocity();
         resetDirection();
-        setDirection(INITIAL_DIRECTION);
 
+        setDirection(INITIAL_DIRECTION);
         const quat = new THREE.Quaternion();
         quat.setFromEuler(new THREE.Euler(0, direction, 0));
         body.setRotation(quat, true);
@@ -131,6 +133,9 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     const left = keys.has("a");
     const right = keys.has("d");
     const drs = keys.has("shift");
+    const [cam1, cam2] = [keys.has("1"), keys.has("2")];
+    if (cam1) setCamMode(0);
+    if (cam2) setCamMode(1);
 
     if (forward) {
       incrementTime(delta);
@@ -169,16 +174,16 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     );
 
     const accelZone = (t: number) => {
-      if (t < 0.3) return 3 + 4 * (t - 1.2); // soft initial throttle
+      if (t < 0.2) return 7 + 5 * (t - 1.0); // soft initial throttle
       if (t < 2.5) return 1 + 6 * (t - 0.1); // power band
-      return t * 10; // taper off
+      return t * 3; // taper off
     };
 
-    const TOP_SPEED = 80;
+    const TOP_SPEED = 85;
 
     if (!isBreaking && isMoving.current) setVelocity(accelZone(time) * delta);
     else if (isBreaking) setVelocity(-velocity * (1 - 0.9965));
-    else setVelocity(-velocity * (1 - 0.99965));
+    else setVelocity(-velocity * (1 - 0.9996));
     const speed = Math.min(TOP_SPEED, velocity + boost);
 
     // console.log(time, isBreaking, speed);
@@ -205,7 +210,8 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       pos.y + camOffset.y,
       pos.z + camOffset.z,
     );
-    camera.position.lerp(targetPos, 0.2);
+    if (camMode == 0) camera.position.lerp(targetPos, 0.2);
+    console.log(camMode);
 
     const target = lookTarget.current;
     target.x = MathUtils.lerp(target.x, pos.x, 0.2);
@@ -237,16 +243,18 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 }
 
 function Hud() {
-  const { setVelocity, velocity, time, isBreaking, boost } = useCarStore(
+  const { setVelocity, velocity, time, isBreaking, boost } = useCarState(
     (state) => state,
   );
+  const { camMode } = useGameState((s) => s);
   const bars = 10;
-  const active = Math.round(time * 5);
+  const active = Math.round(time * 6);
+  const speed = Math.floor(Math.min(velocity, 85) * 3.27) + boost;
 
   return (
     <div className="absolute top-0 w-full flex justify-center items-center gap-5 z-1">
-      <p className="tracking-tighter text-2xl font-bold">
-        {Math.floor(Math.min(velocity, 80) * 3)} m/ph{" "}
+      <p className="tracking-tighter text-2xl font-medium text-neutral-900">
+        {speed} mph{" "}
       </p>
       <span
         className={cn(
@@ -270,6 +278,10 @@ function Hud() {
       >
         DRS{" "}
       </p>
+      <span className={"text-xl text-red-500 flex items-center gap-1.5"}>
+        <p className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+        Cam {camMode + 1}
+      </span>
     </div>
   );
 }
@@ -327,6 +339,18 @@ function Help() {
           LSHIFT
         </kbd>{" "}
         DRS
+      </span>
+      <span className="flex items-center gap-1.5">
+        <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
+          1
+        </kbd>{" "}
+        cam 1
+      </span>
+      <span className="flex items-center gap-1.5">
+        <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
+          2
+        </kbd>{" "}
+        cam 2
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
