@@ -22,14 +22,14 @@ export default function Home() {
         <Help />
 
         <Canvas
-          camera={{ fov: 85, near: 0.1, far: 1000, position: [10, 20, 15] }}
+          camera={{ fov: 85, near: 0.1, far: 800, position: [10, 20, 15] }}
         >
-          <fog attach="fog" args={[0xcfecf7, 100, 400]} />
+          <fog attach="fog" args={[0xfad5a5, 70, 400]} />
           <Environment preset="sunset" />
           <ambientLight intensity={0.8} />
           {/* <gridHelper args={[500, 30, 30]} /> */}
           {/* <axesHelper args={[50]} /> */}
-          <Physics>
+          <Physics debug>
             <Suspense fallback={<></>}>
               <Car />
               <Track />
@@ -46,24 +46,28 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
   const { scene } = useGLTF("/models/f1.glb");
   const {
     direction,
-    velocity,
+    time,
     boost,
+    isBreaking,
+    velocity,
+    setVelocity,
+    setIsBreaking,
     setBoost,
     resetDirection,
     resetVelocity,
-    setVelocity,
+    resetTime,
+    incrementTime,
     setDirection,
   } = useCarStore((state) => state);
 
   const bodyRef = useRef<RapierRigidBody>(null);
   const isMoving = useRef<boolean>(false);
-  const isBoosting = useRef<number>(0);
   const initialLoad = useRef<boolean>(false);
   const lookTarget = useRef(new THREE.Vector3());
 
   const TURN_STEP = Math.PI / 16;
-  const INITIAL_DIRECTION = -0 * TURN_STEP;
-  const INITIAL_POSITION: [x: number, y: number, z: number] = [15, 0, 0];
+  const INITIAL_DIRECTION = -16 * TURN_STEP;
+  const INITIAL_POSITION: [x: number, y: number, z: number] = [-165, 0, 3];
 
   useEffect(() => {
     if (bodyRef.current && !initialLoad.current) {
@@ -76,13 +80,14 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
+      switch (e.key.toLowerCase()) {
         case "w":
-          setVelocity(0.065);
           isMoving.current = true;
+          incrementTime(0.1);
           break;
-        case "s":
-          isMoving.current = false;
+        case " ":
+          setIsBreaking(true);
+          incrementTime(-0.1);
           break;
         case "d":
           setDirection(-TURN_STEP);
@@ -103,25 +108,34 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
           );
           body.setLinvel({ x: 0, y: 0, z: 0 }, true);
           body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+          resetTime();
           resetVelocity();
-
           resetDirection();
           setDirection(INITIAL_DIRECTION);
+
           const quat = new THREE.Quaternion();
           quat.setFromEuler(new THREE.Euler(0, direction, 0));
           body.setRotation(quat, true);
 
           break;
-        case " ":
-          if (isMoving.current) setVelocity(0.065);
+        case "shift":
+          if (isMoving.current) incrementTime(0.1);
           setBoost(true);
           break;
+        default:
+          console.log(e.key);
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "w") isMoving.current = false;
-      if (e.key === " ") setBoost(false);
+      if (e.key.toLowerCase() === "w") {
+        resetTime();
+        isMoving.current = false;
+      }
+      if (e.key === " ") {
+        setIsBreaking(false);
+      }
+      if (e.key.toLowerCase() === "shift") setBoost(false);
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -132,7 +146,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     };
   }, []);
 
-  useFrame(({ camera }, _) => {
+  useFrame(({ camera }, delta) => {
     if (!bodyRef.current) return;
     const body = bodyRef.current;
 
@@ -160,30 +174,36 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       true,
     );
 
+    const accelZone = (t: number) => {
+      if (t < 0.3) return 3 + 4 * (t - 1.2); // soft initial throttle
+      if (t < 2.5) return 1 + 6 * (t - 0.1); // power band
+      return t * 10; // taper off
+    };
+
     const TOP_SPEED = 80;
-    const MID_POINT_T = 1;
-    const ACCEL_SPEED = 1.5;
-    const curvedVelocity =
-      (TOP_SPEED * Math.pow(velocity, ACCEL_SPEED)) /
-        (Math.pow(velocity, ACCEL_SPEED) + Math.pow(MID_POINT_T, ACCEL_SPEED)) +
-      boost;
-    // const curvedVelocity = Math.tanh(velocity * 2.5) * 70 + isBoosting.current;
-    // const curvedVelocity = Math.pow(velocity, 3) * 50 + isBoosting.current;
+
+    if (!isBreaking && isMoving.current) setVelocity(accelZone(time) * delta);
+    else if (isBreaking) setVelocity(-(velocity * (1 - 0.9965)));
+    else setVelocity(-velocity * (1 - 0.9998));
+
+    const speed = Math.min(TOP_SPEED, isBreaking ? velocity : velocity + boost);
+
+    // console.log(time, isBreaking, speed);
     body.setLinvel(
       new THREE.Vector3(
-        -Math.sin(direction) * curvedVelocity,
+        -Math.sin(direction) * speed,
         0,
-        -Math.cos(direction) * curvedVelocity,
+        -Math.cos(direction) * speed,
       ),
       true,
     );
 
     // add downforce lmfao
     // this was for my other track with different elevations but keeping it here for trolls
-    const downforce = -Math.pow(curvedVelocity, 1.2) * 0.5;
+    const downforce = -Math.pow(velocity, 1.2) * 0.5;
     body.applyImpulse({ x: 0, y: downforce, z: 0 }, true);
 
-    const camOffset = new THREE.Vector3(0, 10, 17);
+    const camOffset = new THREE.Vector3(0, 8, 17);
     camOffset.applyQuaternion(targetQuat);
 
     const pos = body.translation();
@@ -224,22 +244,23 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 }
 
 function Hud() {
-  const { velocity, boost } = useCarStore((state) => state);
+  const { setVelocity, velocity, time, isBreaking, boost } = useCarStore(
+    (state) => state,
+  );
   const bars = 10;
-  const TOP_SPEED = 200;
-  const MID_POINT_T = 1;
-  const ACCEL_SPEED = 1.5;
-  const curvedVelocity =
-    (TOP_SPEED * Math.pow(velocity, ACCEL_SPEED)) /
-      (Math.pow(velocity, ACCEL_SPEED) + Math.pow(MID_POINT_T, ACCEL_SPEED)) +
-    boost;
-  const active = Math.round(velocity * 0.5 * bars);
+  const active = Math.round(time * 5);
+
   return (
     <div className="absolute top-0 w-full flex justify-center items-center gap-5 z-1">
       <p className="tracking-tighter text-2xl font-bold">
-        {Math.floor(curvedVelocity)} m/ph{" "}
+        {Math.floor(Math.min(velocity, 80) * 3)} m/ph{" "}
       </p>
-      <span className="gap-1 p-2 m-2 flex bg-black/20 text-white text-2xl shadow">
+      <span
+        className={cn(
+          isBreaking ? "bg-red-600" : "bg-black/20",
+          "gap-1 p-2 m-2 flex text-white text-2xl shadow",
+        )}
+      >
         {Array.from({ length: bars }).map((_, i) => (
           <div
             key={i}
@@ -263,12 +284,20 @@ function Hud() {
 function Track(
   props: Omit<React.JSX.IntrinsicElements["primitive"], "object">,
 ) {
-  const { scene } = useGLTF("/models/track.glb");
+  // const { scene } = useGLTF("/models/track.glb");
+  //
+  // return (
+  //   <RigidBody friction={0} restitution={0} type="fixed" colliders={false}>
+  //     <primitive {...props} object={scene} scale={5.75} />
+  //     <CuboidCollider args={[800, 0.1, 800]} position={[0, -0.075, 0]} />
+  //   </RigidBody>
+  // );
+  const { scene } = useGLTF("/models/track2.glb");
 
   return (
     <RigidBody friction={0} restitution={0} type="fixed" colliders={false}>
-      <primitive {...props} object={scene} scale={5.75} />
-      <CuboidCollider args={[800, 0.1, 800]} position={[0, -0.075, 0]} />
+      <primitive {...props} object={scene} scale={3.25} />
+      <CuboidCollider args={[1800, 0.1, 1800]} position={[0, -0.075, 0]} />
     </RigidBody>
   );
 }
@@ -278,37 +307,37 @@ function Help() {
     <section className="flex flex-col space-y-1 p-2 m-2 z-1 absolute bottom-0 right-0 bg-white/60 backdrop-blur">
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          w
+          W
         </kbd>{" "}
         forward
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          s
+          ⎵
         </kbd>{" "}
         brake
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          d
+          D
         </kbd>{" "}
         right
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          a
+          A
         </kbd>{" "}
         left
       </span>
       <span className="flex items-center gap-1.5">
-        <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          ⎵
+        <kbd className="py-0.25 text-sm px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
+          LSHIFT
         </kbd>{" "}
         DRS
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          r
+          R
         </kbd>{" "}
         reset
       </span>

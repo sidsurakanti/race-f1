@@ -4,7 +4,7 @@ import "@/styles/globals.css";
 import { sans, mono } from "@/styles/fonts";
 
 export const metadata: Metadata = {
-  title: "Race Monaco",
+  title: "Race Formula 1",
   description: "",
 };
 
