@@ -24,7 +24,7 @@ export default function Home() {
         <Canvas
           camera={{ fov: 85, near: 0.1, far: 800, position: [10, 40, 15] }}
         >
-          <fog attach="fog" args={[0xfad5a5, 70, 400]} />
+          <fog attach="fog" args={[0xfbc8c0, 50, 400]} />
           <Environment preset="sunset" />
           <ambientLight intensity={0.8} />
           {/* <gridHelper args={[500, 30, 30]} /> */}
@@ -64,6 +64,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 
   const bodyRef = useRef<RapierRigidBody>(null);
   const isMoving = useRef<boolean>(false);
+  const reverse = useRef<boolean>(false);
   const initialLoad = useRef<boolean>(false);
   const lookTarget = useRef(new THREE.Vector3());
 
@@ -86,6 +87,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     };
 
     const handleKeyUp = ({ key }: KeyboardEvent) => {
+      if (key === "w" || key === "s") resetTime();
       keysPressed.current.delete(key.toLowerCase());
     };
 
@@ -129,6 +131,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       }
     }
     const forward = keys.has("w");
+    const back = keys.has("s");
     const brake = keys.has(" ");
     const left = keys.has("a");
     const right = keys.has("d");
@@ -138,8 +141,13 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     if (cam2) setCamMode(1);
 
     if (forward) {
-      incrementTime(delta);
+      reverse.current = false;
       isMoving.current = true;
+      incrementTime(delta);
+    } else if (back) {
+      reverse.current = true;
+      isMoving.current = true;
+      incrementTime(delta);
     } else {
       isMoving.current = false;
     }
@@ -173,20 +181,28 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       true,
     );
 
-    const accelZone = (t: number) => {
-      if (t < 0.2) return 7 + 5 * (t - 1.0); // soft initial throttle
-      if (t < 2.5) return 1 + 6 * (t - 0.1); // power band
-      return t * 3; // taper off
+    const accelZone = (timeElapsed: number) => {
+      if (timeElapsed == 0) return 0;
+      const t = Math.abs(timeElapsed);
+      const accel =
+        t < 0.2 ? 7 + 5 * (t - 1.0) : t < 2.5 ? 1 + 6 * (t - 0.1) : t * 3;
+      return accel;
     };
 
     const TOP_SPEED = 85;
 
-    if (!isBreaking && isMoving.current) setVelocity(accelZone(time) * delta);
-    else if (isBreaking) setVelocity(-velocity * (1 - 0.9965));
-    else setVelocity(-velocity * (1 - 0.9996));
-    const speed = Math.min(TOP_SPEED, velocity + boost);
+    const isBackwards = reverse.current ? -1 : 1;
+    if (isBreaking) {
+      const directionSign = velocity >= 0 ? 1 : -1;
+      const speedMag = Math.abs(velocity);
+      const decay = speedMag < 5 ? 0.05 : speedMag * 0.009;
 
-    // console.log(time, isBreaking, speed);
+      setVelocity(-decay * directionSign);
+    } else if (forward || back) {
+      setVelocity(accelZone(time) * delta * isBackwards);
+    } else setVelocity(-velocity * (1 - 0.9996));
+
+    const speed = Math.min(TOP_SPEED, velocity + boost);
     body.setLinvel(
       new THREE.Vector3(
         -Math.sin(direction) * speed,
@@ -198,7 +214,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 
     // add downforce lmfao
     // this was for my other track with different elevations but keeping it here for trolls
-    const downforce = -Math.pow(velocity, 1.2) * 0.5;
+    const downforce = -Math.pow(Math.abs(velocity), 1.2) * 0.5;
     body.applyImpulse({ x: 0, y: downforce, z: 0 }, true);
 
     const camOffset = new THREE.Vector3(0, 8, 17);
@@ -211,7 +227,6 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       pos.z + camOffset.z,
     );
     if (camMode == 0) camera.position.lerp(targetPos, 0.2);
-    console.log(camMode);
 
     const target = lookTarget.current;
     target.x = MathUtils.lerp(target.x, pos.x, 0.2);
@@ -243,18 +258,16 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 }
 
 function Hud() {
-  const { setVelocity, velocity, time, isBreaking, boost } = useCarState(
-    (state) => state,
-  );
+  const { velocity, time, isBreaking, boost } = useCarState((state) => state);
   const { camMode } = useGameState((s) => s);
   const bars = 10;
   const active = Math.round(time * 6);
-  const speed = Math.floor(Math.min(velocity, 85) * 3.27) + boost;
+  const speed = Math.abs(Math.floor(Math.min(velocity, 85) * 3.27) + boost);
 
   return (
     <div className="absolute top-0 w-full flex justify-center items-center gap-5 z-1">
       <p className="tracking-tighter text-2xl font-medium text-neutral-900">
-        {speed} mph{" "}
+        {speed < 2 ? 0 : speed} mph{" "}
       </p>
       <span
         className={cn(
@@ -268,7 +281,9 @@ function Hud() {
             className={cn("w-6 h-6 shadow-sm", i < active ? "" : "bg-black/60")}
             style={{
               backgroundColor:
-                i < active ? `hsl(${i * 12}, 100%, 50%)` : undefined,
+                i < active && velocity >= 0
+                  ? `hsl(${i * 12}, 100%, 50%)`
+                  : undefined,
             }}
           />
         ))}
@@ -318,9 +333,9 @@ function Help() {
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
-          ⎵
+          S
         </kbd>{" "}
-        brake
+        back
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
@@ -333,6 +348,12 @@ function Help() {
           A
         </kbd>{" "}
         left
+      </span>
+      <span className="flex items-center gap-1.5">
+        <kbd className="py-0.25 px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">
+          ⎵
+        </kbd>{" "}
+        brake
       </span>
       <span className="flex items-center gap-1.5">
         <kbd className="py-0.25 text-sm px-2 shadow-md border border-stone-400 rounded-lg bg-stone-200">

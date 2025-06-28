@@ -35,7 +35,7 @@ export const useCarState = create<CarState>()((set) => ({
   velocity: 0,
   setVelocity: (n) =>
     set((state) => ({
-      velocity: Math.min(85, Math.max(0, state.velocity + n)),
+      velocity: Math.min(85, Math.max(state.velocity + n)),
     })),
   setIsBreaking: (tf) => set({ isBreaking: tf }),
   setBoost: (tf) => set({ boost: tf ? 20 : 0 }),
@@ -43,7 +43,7 @@ export const useCarState = create<CarState>()((set) => ({
   resetVelocity: () => set({ velocity: 0 }),
   incrementTime: (n) =>
     set((state) => ({
-      time: Math.max(0, state.time + n),
+      time: Math.max(state.time + n),
     })),
 
   resetDirection: () => set({ direction: 0 }),
