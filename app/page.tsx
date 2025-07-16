@@ -22,17 +22,69 @@ export default function Home() {
         <Help />
 
         <Canvas
-          camera={{ fov: 85, near: 0.1, far: 800, position: [10, 40, 15] }}
+          camera={{ fov: 85, near: 0.1, far: 2000, position: [10, 40, 15] }}
         >
           <fog attach="fog" args={[0xfbc8c0, 50, 400]} />
           <Environment preset="sunset" />
           <ambientLight intensity={0.8} />
           {/* <gridHelper args={[500, 30, 30]} /> */}
           {/* <axesHelper args={[50]} /> */}
-          <Physics debug>
+          <Physics>
             <Suspense fallback={<></>}>
               <Car />
               <Track />
+
+              <CuboidCollider args={[400, 10, 5]} position={[0, 0.5, 20]} />
+              <CuboidCollider
+                args={[150, 10, 5]}
+                rotation={[0, Math.PI / 4.3, 0]}
+                position={[400, 0.5, 20]}
+              />
+              <CuboidCollider
+                args={[250, 10, 5]}
+                rotation={[0, Math.PI / 1.95, 0]}
+                position={[500, 0.5, -250]}
+              />
+              <CuboidCollider
+                args={[350, 10, 5]}
+                rotation={[0, -Math.PI / 4.5, 0]}
+                position={[550, 0.5, -450]}
+              />
+              <CuboidCollider
+                args={[500, 10, 5]}
+                rotation={[0, -Math.PI / -1.012, 0]}
+                position={[100, 0.5, -621]}
+              />
+              <CuboidCollider
+                args={[100, 10, 5]}
+                rotation={[0, -Math.PI / 1.3, 0]}
+                position={[250, 0.5, -595]}
+              />
+              <CuboidCollider
+                args={[100, 10, 5]}
+                rotation={[0, -Math.PI / 2.7, 0]}
+                position={[200, 0.5, -525]}
+              />
+              <CuboidCollider
+                rotation={[0, -Math.PI / -2.025, 0]}
+                args={[400, 10, 5]}
+                position={[-470, 0.5, -400]}
+              />
+              <CuboidCollider
+                args={[410, 10, 5]}
+                rotation={[0, -Math.PI / 1.004, 0]}
+                position={[5, 0.5, -105]}
+              />
+              <CuboidCollider
+                args={[300, 10, 5]}
+                rotation={[0, -Math.PI / 1.004, 0]}
+                position={[-225, 0.5, -158]}
+              />
+              <CuboidCollider
+                args={[300, 10, 5]}
+                rotation={[0, -Math.PI / 1.004, 0]}
+                position={[-225, 0.5, -200]}
+              />
             </Suspense>
           </Physics>
           <OrbitControls />
@@ -169,7 +221,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     targetQuat.setFromEuler(new THREE.Euler(0, direction, 0));
 
     const smoothedQuat = currQuat.clone(); // clone so we don’t mutate the original
-    smoothedQuat.slerp(targetQuat, 0.4);
+    smoothedQuat.slerp(targetQuat, 0.1);
 
     body.setRotation(
       {
@@ -184,8 +236,13 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     const accelZone = (timeElapsed: number) => {
       if (timeElapsed == 0) return 0;
       const t = Math.abs(timeElapsed);
+      // prettier-ignore
       const accel =
-        t < 0.2 ? 7 + 5 * (t - 1.0) : t < 2.5 ? 1 + 6 * (t - 0.1) : t * 3;
+        t < 1.5 ?
+          7 + 8 * (t - 0.1) : 
+        t < 3.5 ? 
+          1 + 6 * (t - 0.1) : 
+        t * 3;
       return accel;
     };
 
@@ -195,7 +252,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     if (isBreaking) {
       const directionSign = velocity >= 0 ? 1 : -1;
       const speedMag = Math.abs(velocity);
-      const decay = speedMag < 5 ? 0.05 : speedMag * 0.009;
+      const decay = speedMag < 7 ? 0.05 : speedMag * 0.002;
 
       setVelocity(-decay * directionSign);
     } else if (forward || back) {
@@ -214,10 +271,10 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
 
     // add downforce lmfao
     // this was for my other track with different elevations but keeping it here for trolls
-    const downforce = -Math.pow(Math.abs(velocity), 1.2) * 0.5;
-    body.applyImpulse({ x: 0, y: downforce, z: 0 }, true);
+    // const downforce = -Math.pow(Math.abs(velocity), 1.2) * 0.5;
+    // body.applyImpulse({ x: 0, y: downforce, z: 0 }, true);
 
-    const camOffset = new THREE.Vector3(0, 8, 17);
+    const camOffset = new THREE.Vector3(0, 8, 20);
     camOffset.applyQuaternion(targetQuat);
 
     const pos = body.translation();
@@ -232,7 +289,7 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
     target.x = MathUtils.lerp(target.x, pos.x, 0.2);
     target.y = MathUtils.lerp(target.y, pos.y, 0.2);
     target.z = MathUtils.lerp(target.z, pos.z, 0.2);
-    camera.lookAt(target.x, target.y, target.z);
+    if (camMode == 0) camera.lookAt(target.x, target.y, target.z);
   });
 
   return (
@@ -243,16 +300,15 @@ function Car(props: Omit<React.JSX.IntrinsicElements["primitive"], "object">) {
       friction={0}
       type="dynamic"
       colliders={false}
-      enabledRotations={[false, true, false]}
       ref={bodyRef}
     >
       <primitive
         {...props}
         object={scene}
-        scale={2.25}
+        scale={2.2}
         rotation={[0, 5 * Math.PI, 0]}
       />
-      <CuboidCollider args={[1.5, 0.2, 5]} position={[0, 0.5, 0]} />
+      <CuboidCollider args={[1.5, 0.5, 5]} position={[0, 0.5, 0]} />
     </RigidBody>
   );
 }
@@ -262,7 +318,7 @@ function Hud() {
   const { camMode } = useGameState((s) => s);
   const bars = 10;
   const active = Math.round(time * 6);
-  const speed = Math.abs(Math.floor(Math.min(velocity, 85) * 3.27) + boost);
+  const speed = Math.abs(Math.floor(Math.min(velocity, 85) * 2.79) + boost);
 
   return (
     <div className="absolute top-0 w-full flex justify-center items-center gap-5 z-1">
