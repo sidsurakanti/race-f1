@@ -9,6 +9,7 @@ type GameState = {
   setRaceStarted: (val: boolean) => void;
   setRaceFinished: (val: boolean) => void;
 };
+
 export const useGameState = create<GameState>()((set) => ({
   camMode: 0,
   raceStarted: false,
