@@ -3,11 +3,19 @@ import { create } from "zustand";
 
 type GameState = {
   camMode: 0 | 1;
+  raceStarted: boolean;
+  raceFinished: boolean;
   setCamMode: (mode: 0 | 1) => void;
+  setRaceStarted: (val: boolean) => void;
+  setRaceFinished: (val: boolean) => void;
 };
 export const useGameState = create<GameState>()((set) => ({
   camMode: 0,
+  raceStarted: false,
+  raceFinished: false,
   setCamMode: (mode) => set({ camMode: mode }),
+  setRaceStarted: (val) => set({ raceStarted: val }),
+  setRaceFinished: (val) => set({ raceFinished: val }),
 }));
 
 export type CarState = {

@@ -33,7 +33,9 @@ export function Car(
     incrementTime,
     setDirection,
   } = useCarState((state) => state);
-  const { camMode, setCamMode } = useGameState((state) => state);
+  const { setRaceStarted, setRaceFinished, camMode, setCamMode } = useGameState(
+    (state) => state,
+  );
   const keysPressed = useRef<Set<string>>(new Set());
 
   const bodyRef = useRef<RapierRigidBody>(null);
@@ -80,6 +82,8 @@ export function Car(
 
     if (keys.has("r")) {
       keys.delete("r");
+      setRaceStarted(false);
+      setRaceFinished(false);
 
       if (bodyRef.current) {
         const body = bodyRef.current;
